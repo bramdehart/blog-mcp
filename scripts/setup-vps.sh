@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# One-time VPS setup. Reads from environment or .env.setup:
-#   SETUP_HOST / SETUP_USER / SETUP_PATH / MCP_API_KEY
-#   GIT_REPO_PATH   — where to clone the blog repo
-#   BLOG_REPO_URL   — git URL of the Jekyll blog repo (e.g. git@github.com:user/blog.git)
-#   GIT_BRANCH      — branch to use (default: main)
-#   SSH_PRIVATE_KEY — SSH private key (only needed in CI; locally uses your default key)
+# One-time VPS setup. Uses the same env vars as deploy.sh:
+#   DEPLOY_HOST       — VPS hostname
+#   DEPLOY_USER       — SSH user (must own DEPLOY_PATH)
+#   DEPLOY_PATH       — Remote app directory, e.g. /opt/apps/blog-mcp
+#   BLOG_REPO_URL     — git URL of the Jekyll blog repo (e.g. git@github.com:user/blog.git)
+#   MCP_API_KEY       — API key (leave empty to auto-generate)
+#   SSH_PRIVATE_KEY   — SSH private key (only needed in CI)
+#   GIT_REPO_PATH     — where to clone the blog repo (default: DEPLOY_PATH/blog-repo)
+#   GIT_BRANCH        — branch to use (default: main)
 
-: "${SETUP_HOST:?Set SETUP_HOST}"
-: "${SETUP_USER:?Set SETUP_USER}"
-: "${SETUP_PATH:?Set SETUP_PATH}"
+: "${DEPLOY_HOST:?Set DEPLOY_HOST}"
+: "${DEPLOY_USER:?Set DEPLOY_USER}"
+: "${DEPLOY_PATH:?Set DEPLOY_PATH}"
 : "${BLOG_REPO_URL:?Set BLOG_REPO_URL}"
 
 if [[ -n "${SSH_PRIVATE_KEY:-}" ]]; then
@@ -18,27 +21,27 @@ if [[ -n "${SSH_PRIVATE_KEY:-}" ]]; then
   mkdir -p ~/.ssh
   echo "${SSH_PRIVATE_KEY}" > ~/.ssh/id_rsa
   chmod 600 ~/.ssh/id_rsa
-  ssh-keyscan -H "${SETUP_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
+  ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
 fi
 
-GIT_REPO_PATH="${GIT_REPO_PATH:-${SETUP_PATH}/blog-repo}"
+GIT_REPO_PATH="${GIT_REPO_PATH:-${DEPLOY_PATH}/blog-repo}"
 GIT_BRANCH="${GIT_BRANCH:-main}"
 MCP_API_KEY="${MCP_API_KEY:-$(openssl rand -hex 32)}"
 
 echo "=== Creating directories ==="
-ssh "${SETUP_USER}@${SETUP_HOST}" bash -s <<ENDSSH
+ssh "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s <<ENDSSH
 set -euo pipefail
-mkdir -p "${SETUP_PATH}" "${GIT_REPO_PATH}"
+mkdir -p "${DEPLOY_PATH}" "${GIT_REPO_PATH}"
 ENDSSH
 
 echo "=== Cloning blog repo ==="
-ssh "${SETUP_USER}@${SETUP_HOST}" \
+ssh "${DEPLOY_USER}@${DEPLOY_HOST}" \
   "git clone --branch ${GIT_BRANCH} '${BLOG_REPO_URL}' '${GIT_REPO_PATH}' || echo 'Repo already exists, skipping clone'"
 
 echo "=== Creating .env ==="
-ssh "${SETUP_USER}@${SETUP_HOST}" bash -s <<ENDSSH
+ssh "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s <<ENDSSH
 set -euo pipefail
-cat > "${SETUP_PATH}/.env" <<EOF
+cat > "${DEPLOY_PATH}/.env" <<EOF
 MCP_API_KEY=${MCP_API_KEY}
 GIT_REPO_PATH=${GIT_REPO_PATH}
 GIT_BRANCH=${GIT_BRANCH}
@@ -49,18 +52,18 @@ MCP_BIND_PORT=3000
 EOF
 ENDSSH
 
-echo "=== Installing systemd service ==="
-scp scripts/systemd/blog-mcp.service "${SETUP_USER}@${SETUP_HOST}:/tmp/blog-mcp.service"
-ssh "${SETUP_USER}@${SETUP_HOST}" bash -s <<ENDSSH
-set -euo pipefail
-sudo mv /tmp/blog-mcp.service /etc/systemd/system/blog-mcp.service
-sudo systemctl daemon-reload
-sudo systemctl enable blog-mcp
-ENDSSH
-
 echo "=== Generated API key (save this!) ==="
 echo "${MCP_API_KEY}"
 
+echo ""
 echo "=== Setup complete ==="
-echo "Review ${SETUP_PATH}/.env on the VPS and adjust if needed."
-echo "Then run: ssh ${SETUP_USER}@${SETUP_HOST} sudo systemctl start blog-mcp"
+echo "Review ${DEPLOY_PATH}/.env on the VPS and adjust if needed."
+echo ""
+echo "Manual steps (run once on VPS as root):"
+echo "  1. scp scripts/systemd/blog-mcp.service ${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/"
+echo "  2. ssh root@${DEPLOY_HOST}"
+echo "  3. sudo mv /tmp/blog-mcp.service /etc/systemd/system/blog-mcp.service"
+echo "  4. sudo systemctl daemon-reload"
+echo "  5. sudo systemctl enable blog-mcp"
+echo "  6. sudo systemctl start blog-mcp"
+echo "  7. echo '${DEPLOY_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart blog-mcp' | sudo tee /etc/sudoers.d/blog-mcp"
