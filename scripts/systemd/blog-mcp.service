@@ -1,0 +1,15 @@
+[Unit]
+Description=Blog MCP Server
+After=network.target
+
+[Service]
+Type=simple
+User=jekyllmcp
+WorkingDirectory=/opt/apps/blog-mcp
+EnvironmentFile=/opt/apps/blog-mcp/.env
+ExecStart=/usr/bin/node /opt/apps/blog-mcp/dist/server.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
