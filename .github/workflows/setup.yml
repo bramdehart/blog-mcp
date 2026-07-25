@@ -1,0 +1,27 @@
+name: Setup VPS
+
+on: workflow_dispatch
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Setup VPS
+        run: bash scripts/setup-vps.sh
+        env:
+          SETUP_HOST: ${{ secrets.DEPLOY_HOST }}
+          SETUP_USER: ${{ secrets.DEPLOY_USER }}
+          SETUP_PATH: ${{ secrets.DEPLOY_PATH }}
+          BLOG_REPO_URL: ${{ secrets.BLOG_REPO_URL }}
+          MCP_API_KEY: ${{ secrets.MCP_API_KEY }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
