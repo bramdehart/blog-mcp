@@ -6,11 +6,20 @@ set -euo pipefail
 #   GIT_REPO_PATH   — where to clone the blog repo
 #   BLOG_REPO_URL   — git URL of the Jekyll blog repo (e.g. git@github.com:user/blog.git)
 #   GIT_BRANCH      — branch to use (default: main)
+#   SSH_PRIVATE_KEY — SSH private key (only needed in CI; locally uses your default key)
 
 : "${SETUP_HOST:?Set SETUP_HOST}"
 : "${SETUP_USER:?Set SETUP_USER}"
 : "${SETUP_PATH:?Set SETUP_PATH}"
 : "${BLOG_REPO_URL:?Set BLOG_REPO_URL}"
+
+if [[ -n "${SSH_PRIVATE_KEY:-}" ]]; then
+  echo "=== Setting up SSH (CI) ==="
+  mkdir -p ~/.ssh
+  echo "${SSH_PRIVATE_KEY}" > ~/.ssh/id_rsa
+  chmod 600 ~/.ssh/id_rsa
+  ssh-keyscan -H "${SETUP_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
+fi
 
 GIT_REPO_PATH="${GIT_REPO_PATH:-${SETUP_PATH}/blog-repo}"
 GIT_BRANCH="${GIT_BRANCH:-main}"
