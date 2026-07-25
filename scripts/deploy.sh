@@ -32,7 +32,7 @@ rsync -avz --delete \
   "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
 
 echo "=== Installing on VPS ==="
-ssh "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s <<'ENDSSH'
+ssh "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s <<ENDSSH
 set -euo pipefail
 cd "${DEPLOY_PATH}"
 npm ci --omit=dev

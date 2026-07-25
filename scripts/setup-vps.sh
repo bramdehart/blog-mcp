@@ -26,7 +26,7 @@ fi
 
 GIT_REPO_PATH="${GIT_REPO_PATH:-${DEPLOY_PATH}/blog-repo}"
 GIT_BRANCH="${GIT_BRANCH:-main}"
-MCP_API_KEY="${MCP_API_KEY:-$(openssl rand -hex 32)}"
+: "${MCP_API_KEY:?Set MCP_API_KEY (generate locally: openssl rand -hex 32)}"
 
 echo "=== Creating directories ==="
 ssh "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s <<ENDSSH
