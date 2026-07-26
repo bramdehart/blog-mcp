@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import z from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -32,7 +32,17 @@ function formatMeta(p: PostMeta) {
     tags: p.tags,
     status: p.status,
     lastModified: p.lastModified,
+    url: postUrl(p.date, p.slug),
   };
+}
+
+function postUrl(date: string, slug: string): string {
+  if (!config.siteUrl) return "";
+  const d = new Date(date);
+  const yyyy = d.getFullYear().toString();
+  const mm = (d.getMonth() + 1).toString().padStart(2, "0");
+  const dd = d.getDate().toString().padStart(2, "0");
+  return `${config.siteUrl}/${yyyy}/${mm}/${dd}/${slug}.html`;
 }
 
 function createServer(): McpServer {
@@ -190,7 +200,7 @@ function createServer(): McpServer {
 
   // --- create_post ---
   server.registerTool("create_post", {
-    description: "Create a new post or draft.",
+    description: "Create a new post or draft. Do NOT rewrite the entire post — only apply the specific changes requested by the user. Present post content as formatted markdown, not as a code block.",
     inputSchema: {
       title: z.string().describe("Post title"),
       body: z.string().describe("Post body (Markdown)"),
@@ -208,18 +218,19 @@ function createServer(): McpServer {
       categories: categories ?? [],
       tags: tags ?? [],
     }, body);
+    const url = postUrl(date ?? new Date().toISOString(), s);
     await commitAndPush(`${status === "published" ? "publish" : "draft"} ${s}`, "feat");
     return {
       content: [{
         type: "text",
-        text: JSON.stringify({ slug: s, status, path: filePath }, null, 2),
+        text: JSON.stringify({ slug: s, status, path: filePath, url: url || undefined }, null, 2),
       }],
     };
   });
 
   // --- edit_post ---
   server.registerTool("edit_post", {
-    description: "Edit an existing post or draft.",
+    description: "Edit an existing post or draft. Do NOT rewrite the entire article — only apply the specific changes the user requested. Present post content as formatted markdown, not as a code block. Requires explicit user confirmation.",
     inputSchema: {
       slug: z.string().describe("The post slug to edit"),
       title: z.string().optional().describe("New title"),
@@ -228,8 +239,12 @@ function createServer(): McpServer {
       categories: z.array(z.string()).optional().describe("New categories"),
       tags: z.array(z.string()).optional().describe("New tags"),
       status: z.enum(["draft", "published"]).optional().describe("New status"),
+      confirm: z.boolean().describe("Must be true to confirm the edit"),
     },
-  }, async ({ slug, title, body, date, categories, tags, status }) => {
+  }, async ({ slug, title, body, date, categories, tags, status, confirm }) => {
+    if (confirm !== true) {
+      return { content: [{ type: "text", text: "Edit cancelled: confirm must be true." }] };
+    }
     const post = readPost(slug);
     const updated = matter.stringify(
       body ?? post.body,
@@ -246,20 +261,22 @@ function createServer(): McpServer {
     if (status && status !== post.status) {
       const result = movePost(slug, post.status, status);
       await commitAndPush(`update ${slug} (${post.status} → ${status})`, "fix");
+      const newUrl = postUrl(date ?? post.date, slug);
       return {
-        content: [{ type: "text", text: JSON.stringify({ slug, status, path: result.newPath }, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify({ slug, status, path: result.newPath, url: newUrl || undefined }, null, 2) }],
       };
     }
 
     await commitAndPush(`update ${slug}`, "fix");
+    const editUrl = postUrl(post.date, slug);
     return {
-      content: [{ type: "text", text: JSON.stringify({ slug, status: post.status, path: post.path }, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify({ slug, status: post.status, path: post.path, url: editUrl || undefined }, null, 2) }],
     };
   });
 
   // --- save_draft ---
   server.registerTool("save_draft", {
-    description: "Save or update a draft.",
+    description: "Save or update a draft. Do NOT rewrite the entire draft — only apply the specific changes requested by the user. Present post content as formatted markdown, not as a code block.",
     inputSchema: {
       title: z.string().describe("Draft title"),
       body: z.string().describe("Draft body (Markdown)"),
@@ -267,8 +284,12 @@ function createServer(): McpServer {
       tags: z.array(z.string()).optional().describe("Tags"),
       slug: z.string().optional().describe("Custom slug (auto-generated from title if omitted)"),
       date: z.string().optional().describe("Date"),
+      confirm: z.boolean().describe("Must be true to confirm saving the draft"),
     },
-  }, async ({ title, body, categories, tags, slug, date }) => {
+  }, async ({ title, body, categories, tags, slug, date, confirm }) => {
+    if (confirm !== true) {
+      return { content: [{ type: "text", text: "Draft save cancelled: confirm must be true." }] };
+    }
     const s = slug ?? slugify(title);
     const dirPath = join(config.repoPath, config.draftsDir);
     mkdirSync(dirPath, { recursive: true });
@@ -312,30 +333,39 @@ function createServer(): McpServer {
 
   // --- publish_post ---
   server.registerTool("publish_post", {
-    description: "Publish a draft or unpublished post.",
+    description: "Publish a draft or unpublished post. Requires explicit user confirmation.",
     inputSchema: {
       slug: z.string().describe("The post slug to publish"),
       date: z.string().optional().describe("Publication date (defaults to now)"),
+      confirm: z.boolean().describe("Must be true to confirm publication"),
     },
-  }, async ({ slug, date }) => {
+  }, async ({ slug, date, confirm }) => {
+    if (confirm !== true) {
+      return { content: [{ type: "text", text: "Publish cancelled: confirm must be true." }] };
+    }
     const post = readPost(slug);
     if (post.status === "published") {
       return { content: [{ type: "text", text: `Post '${slug}' is already published.` }] };
     }
     const result = movePost(slug, "draft", "published");
     await commitAndPush(`publish ${slug}`, "feat");
+    const pubUrl = postUrl(date ?? post.date, slug);
     return {
-      content: [{ type: "text", text: JSON.stringify({ slug, status: "published", path: result.newPath }, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify({ slug, status: "published", path: result.newPath, url: pubUrl || undefined }, null, 2) }],
     };
   });
 
   // --- unpublish_post ---
   server.registerTool("unpublish_post", {
-    description: "Unpublish a post and move it back to drafts.",
+    description: "Unpublish a post and move it back to drafts. Requires explicit user confirmation.",
     inputSchema: {
       slug: z.string().describe("The post slug to unpublish"),
+      confirm: z.boolean().describe("Must be true to confirm unpublishing"),
     },
-  }, async ({ slug }) => {
+  }, async ({ slug, confirm }) => {
+    if (confirm !== true) {
+      return { content: [{ type: "text", text: "Unpublish cancelled: confirm must be true." }] };
+    }
     const post = readPost(slug);
     if (post.status === "draft") {
       return { content: [{ type: "text", text: `Post '${slug}' is already a draft.` }] };
@@ -349,21 +379,37 @@ function createServer(): McpServer {
 
   // --- upload_image ---
   server.registerTool("upload_image", {
-    description: "Upload an image to the repository.",
+    description: "Upload an image to the repository. Only accepts PNG, JPEG, GIF, WebP, or SVG files.",
     inputSchema: {
-      filename: z.string().describe("Image filename (e.g., photo.png)"),
+      filename: z.string().describe("Image filename (e.g., photo.png) — must end in .png, .jpg, .jpeg, .gif, .webp, or .svg"),
       content: z.string().describe("Base64-encoded image content"),
       alt: z.string().optional().describe("Alt text for the image"),
       folder: z.string().optional().describe("Subfolder within assets/images/"),
     },
   }, async ({ filename, content, alt, folder }) => {
     const safeName = basename(filename);
+    const ext = safeName.split(".").pop()?.toLowerCase();
+    const allowed = ["png", "jpg", "jpeg", "gif", "webp", "svg"];
+    if (!ext || !allowed.includes(ext)) {
+      return { content: [{ type: "text", text: `Invalid image type: .${ext}. Allowed: ${allowed.join(", ")}` }], isError: true };
+    }
+
+    let buffer: Buffer;
+    try {
+      buffer = Buffer.from(content, "base64");
+      if (buffer.length === 0) throw new Error("Empty content");
+    } catch {
+      return { content: [{ type: "text", text: "Invalid base64 content." }], isError: true };
+    }
+
     const imgDir = folder ? join(config.repoPath, config.imagesDir, folder) : join(config.repoPath, config.imagesDir);
     mkdirSync(imgDir, { recursive: true });
     const filePath = join(imgDir, safeName);
-
-    const buffer = Buffer.from(content, "base64");
     writeFileSync(filePath, buffer);
+
+    if (!existsSync(filePath) || Buffer.byteLength(readFileSync(filePath)) === 0) {
+      return { content: [{ type: "text", text: "Failed to write image file." }], isError: true };
+    }
 
     const publicPath = folder
       ? `/${config.imagesDir}/${folder}/${safeName}`
@@ -379,15 +425,21 @@ function createServer(): McpServer {
 
   // --- attach_image_to_post ---
   server.registerTool("attach_image_to_post", {
-    description: "Insert an image reference into a post.",
+    description: "Insert an image reference into a post. Validates that the image file exists in the repository before attaching.",
     inputSchema: {
       postSlug: z.string().describe("The post slug to attach the image to"),
-      imagePath: z.string().describe("Image path (e.g., /assets/images/photo.png)"),
+      imagePath: z.string().describe("Image path as returned by upload_image (e.g., /assets/images/photo.png)"),
       alt: z.string().optional().describe("Alt text for the image"),
       position: z.enum(["start", "end", "append"]).optional().describe("Where to insert the image"),
       caption: z.string().optional().describe("Image caption"),
     },
   }, async ({ postSlug, imagePath, alt, position, caption }) => {
+    const cleanPath = imagePath.startsWith("/") ? imagePath.slice(1) : imagePath;
+    const fullImagePath = join(config.repoPath, cleanPath);
+    if (!existsSync(fullImagePath)) {
+      return { content: [{ type: "text", text: `Image not found: ${imagePath}. Upload it first with upload_image.` }], isError: true };
+    }
+
     const post = readPost(postSlug);
     let imgMd = `![${alt ?? ""}](${imagePath})`;
     if (caption) imgMd += `\n*${caption}*`;
