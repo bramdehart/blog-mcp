@@ -25,3 +25,6 @@ jobs:
           BLOG_REPO_URL: ${{ secrets.BLOG_REPO_URL }}
           MCP_API_KEY: ${{ secrets.MCP_API_KEY }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
+          GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
+          MCP_BIND_PORT: ${{ secrets.MCP_BIND_PORT }}
