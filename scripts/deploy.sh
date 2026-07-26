@@ -2,10 +2,9 @@
 set -euo pipefail
 
 # Reads from environment variables (set locally via .env.deploy or via GitHub Secrets in CI):
-#   DEPLOY_HOST        — VPS hostname, e.g. blog-mcp.bramdehart.nl
-#   DEPLOY_USER        — SSH user, e.g. deploy
+#   DEPLOY_HOST        — VPS hostname
+#   DEPLOY_USER        — SSH user
 #   DEPLOY_PATH        — Remote app directory, e.g. /opt/apps/blog-mcp
-#   MCP_API_KEY        — API key for the MCP server (written to .env on the VPS)
 #   SSH_PRIVATE_KEY    — SSH private key (only needed in CI; locally uses your default key)
 
 : "${DEPLOY_HOST:?Set DEPLOY_HOST}"
@@ -25,11 +24,8 @@ npm ci
 npm run build
 
 echo "=== Syncing files ==="
-rsync -avz --delete \
-  dist/ \
-  package.json \
-  package-lock.json \
-  "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
+rsync -avz --delete dist/ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/dist/"
+rsync -avz package.json package-lock.json "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
 
 echo "=== Installing on VPS ==="
 ssh "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s <<ENDSSH
@@ -37,12 +33,6 @@ set -euo pipefail
 cd "${DEPLOY_PATH}"
 npm ci --omit=dev
 ENDSSH
-
-if [[ -n "${MCP_API_KEY:-}" ]]; then
-  echo "=== Updating .env on VPS ==="
-  ssh "${DEPLOY_USER}@${DEPLOY_HOST}" \
-    "cd ${DEPLOY_PATH} && grep -q '^MCP_API_KEY=' .env 2>/dev/null && sed -i 's/^MCP_API_KEY=.*/MCP_API_KEY=${MCP_API_KEY}/' .env || echo 'MCP_API_KEY=${MCP_API_KEY}' >> .env"
-fi
 
 echo "=== Restarting service ==="
 ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "sudo systemctl restart blog-mcp"
