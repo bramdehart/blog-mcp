@@ -37,6 +37,7 @@ export const config = {
   bindHost: env("MCP_BIND_HOST", "127.0.0.1"),
   bindPort: parseInt(env("MCP_BIND_PORT", "3000"), 10),
   publicHost: env("PUBLIC_HOST", "localhost"),
+  siteUrl: env("SITE_URL", ""),
   postsDir: "_posts",
   draftsDir: "_drafts",
   imagesDir: "assets/images",

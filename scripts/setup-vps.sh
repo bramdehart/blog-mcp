@@ -50,6 +50,7 @@ GIT_USER_EMAIL=${GIT_USER_EMAIL:-email@example.com}
 MCP_BIND_HOST=127.0.0.1
 MCP_BIND_PORT=${MCP_BIND_PORT:-4000}
 PUBLIC_HOST=${DEPLOY_HOST}
+SITE_URL=${SITE_URL:-https://example.com}  # set to your blog's public URL (e.g. https://bramdehart.nl)
 EOF
 ENDSSH
 
