@@ -23,4 +23,5 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           BLOG_REPO_URL: ${{ secrets.BLOG_REPO_URL }}
+          MCP_API_KEY: ${{ secrets.MCP_API_KEY }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
