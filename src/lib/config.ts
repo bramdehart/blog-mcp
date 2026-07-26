@@ -36,6 +36,7 @@ export const config = {
   gitUserEmail: env("GIT_USER_EMAIL", "mcp@example.com"),
   bindHost: env("MCP_BIND_HOST", "127.0.0.1"),
   bindPort: parseInt(env("MCP_BIND_PORT", "3000"), 10),
+  publicHost: env("PUBLIC_HOST", "localhost"),
   postsDir: "_posts",
   draftsDir: "_drafts",
   imagesDir: "assets/images",

@@ -483,7 +483,7 @@ function createServer(): McpServer {
 
 const transports: Record<string, StreamableHTTPServerTransport> = {};
 
-const app = createMcpExpressApp();
+const app = createMcpExpressApp({ host: config.bindHost, allowedHosts: [config.publicHost] });
 
 app.post("/mcp", requireApiKey(), async (req, res) => {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
