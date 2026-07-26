@@ -45,7 +45,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=jekyllmcp
+User=blog-mcp
 WorkingDirectory=/opt/jekyll-mcp/app
 EnvironmentFile=/opt/jekyll-mcp/.env
 ExecStart=/usr/bin/node /opt/jekyll-mcp/app/server.js

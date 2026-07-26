@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=jekyllmcp
+User=blog-mcp
 WorkingDirectory=/opt/apps/blog-mcp
 EnvironmentFile=/opt/apps/blog-mcp/.env
 ExecStart=/usr/bin/node /opt/apps/blog-mcp/dist/server.js
