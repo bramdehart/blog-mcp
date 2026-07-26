@@ -446,6 +446,8 @@ function createServer(): McpServer {
     }
 
     await git.add(".");
+    await git.addConfig("user.name", config.gitUserName);
+    await git.addConfig("user.email", config.gitUserEmail);
 
     let message = commitMessage;
     if (!message) {
