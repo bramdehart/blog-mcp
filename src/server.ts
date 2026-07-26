@@ -41,6 +41,18 @@ function createServer(): McpServer {
     { capabilities: { logging: {} } }
   );
 
+  async function commitAndPush(summary: string, type: "feat" | "fix" | "chore" = "chore"): Promise<string | null> {
+    const git = simpleGit(config.repoPath);
+    const status = await git.status();
+    if (status.isClean()) return null;
+    await git.add(".");
+    await git.addConfig("user.name", config.gitUserName);
+    await git.addConfig("user.email", config.gitUserEmail);
+    const commitResult = await git.commit(`${type}: ${summary}`);
+    await git.push("origin", config.branch);
+    return commitResult.commit;
+  }
+
   // --- list_posts ---
   server.registerTool("list_posts", {
     description: "List posts and drafts with optional filters.",
@@ -196,6 +208,7 @@ function createServer(): McpServer {
       categories: categories ?? [],
       tags: tags ?? [],
     }, body);
+    await commitAndPush(`${status === "published" ? "publish" : "draft"} ${s}`, "feat");
     return {
       content: [{
         type: "text",
@@ -232,11 +245,13 @@ function createServer(): McpServer {
 
     if (status && status !== post.status) {
       const result = movePost(slug, post.status, status);
+      await commitAndPush(`update ${slug} (${post.status} → ${status})`, "fix");
       return {
         content: [{ type: "text", text: JSON.stringify({ slug, status, path: result.newPath }, null, 2) }],
       };
     }
 
+    await commitAndPush(`update ${slug}`, "fix");
     return {
       content: [{ type: "text", text: JSON.stringify({ slug, status: post.status, path: post.path }, null, 2) }],
     };
@@ -273,6 +288,7 @@ function createServer(): McpServer {
 
     writePostFile(s, "draft", fm, body);
 
+    await commitAndPush(`draft ${s}`, "feat");
     return {
       content: [{ type: "text", text: JSON.stringify({ slug: s, status: "draft", path: filePath }, null, 2) }],
     };
@@ -307,6 +323,7 @@ function createServer(): McpServer {
       return { content: [{ type: "text", text: `Post '${slug}' is already published.` }] };
     }
     const result = movePost(slug, "draft", "published");
+    await commitAndPush(`publish ${slug}`, "feat");
     return {
       content: [{ type: "text", text: JSON.stringify({ slug, status: "published", path: result.newPath }, null, 2) }],
     };
@@ -324,6 +341,7 @@ function createServer(): McpServer {
       return { content: [{ type: "text", text: `Post '${slug}' is already a draft.` }] };
     }
     const result = movePost(slug, "published", "draft");
+    await commitAndPush(`unpublish ${slug}`, "feat");
     return {
       content: [{ type: "text", text: JSON.stringify({ slug, status: "draft", path: result.newPath }, null, 2) }],
     };
@@ -353,6 +371,7 @@ function createServer(): McpServer {
 
     const md = `![${alt ?? safeName}](${publicPath})`;
 
+    await commitAndPush(`upload ${safeName}`, "feat");
     return {
       content: [{ type: "text", text: JSON.stringify({ path: publicPath, markdown: md }, null, 2) }],
     };
@@ -398,6 +417,7 @@ function createServer(): McpServer {
     const content = matter.stringify(newBody, fm);
     writeFileSync(post.path, content);
 
+    await commitAndPush(`attach image to ${postSlug}`, "feat");
     return {
       content: [{ type: "text", text: JSON.stringify({ slug: postSlug, inserted: imgMd }, null, 2) }],
     };

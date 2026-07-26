@@ -253,7 +253,7 @@ export function writePostFile(slug: string, status: "published" | "draft", front
   mkdirSync(dirPath, { recursive: true });
 
   const date = frontMatter.date
-    ? (typeof frontMatter.date === "string" ? frontMatter.date : new Date(frontMatter.date as string).toISOString().slice(0, 10))
+    ? new Date(frontMatter.date as string).toISOString().slice(0, 10)
     : new Date().toISOString().slice(0, 10);
 
   const filename = status === "published"
