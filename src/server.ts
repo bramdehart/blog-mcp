@@ -63,6 +63,24 @@ function createServer(): McpServer {
     return commitResult.commit;
   }
 
+  function validateImageRefs(body: string): string[] {
+    const missing: string[] = [];
+    const re = /!\[.*?\]\((\/[^)]+)\)/g;
+    let match;
+    while ((match = re.exec(body)) !== null) {
+      const path = match[1];
+      if (path.startsWith("http://") || path.startsWith("https://")) {
+        missing.push(`${path} (external URLs not allowed — upload the image first with upload_image and use the returned path)`);
+        continue;
+      }
+      const cleanPath = path.startsWith("/") ? path.slice(1) : path;
+      if (!existsSync(join(config.repoPath, cleanPath))) {
+        missing.push(`${path} (file not found — upload it first with upload_image)`);
+      }
+    }
+    return missing;
+  }
+
   // --- list_posts ---
   server.registerTool("list_posts", {
     description: "List posts and drafts with optional filters.",
@@ -200,10 +218,10 @@ function createServer(): McpServer {
 
   // --- create_post ---
   server.registerTool("create_post", {
-    description: "Create a new post or draft. Do NOT rewrite the entire post — only apply the specific changes requested by the user. Present post content as formatted markdown, not as a code block.",
+    description: "Create a new post or draft. Do NOT rewrite the entire post — only apply the specific changes requested by the user. Present post content as formatted markdown, not as a code block. IMPORTANT: upload all images first with upload_image, then use the returned paths in your article body. External image URLs are NOT allowed.",
     inputSchema: {
       title: z.string().describe("Post title"),
-      body: z.string().describe("Post body (Markdown)"),
+      body: z.string().describe("Post body (Markdown). Image paths must come from upload_image responses (e.g. /assets/images/photo.png). No external URLs."),
       date: z.string().optional().describe("Publication date (defaults to now)"),
       categories: z.array(z.string()).optional().describe("Categories"),
       tags: z.array(z.string()).optional().describe("Tags"),
@@ -211,6 +229,11 @@ function createServer(): McpServer {
       slug: z.string().optional().describe("Custom slug (auto-generated from title if omitted)"),
     },
   }, async ({ title, body, date, categories, tags, status, slug }) => {
+    const missing = validateImageRefs(body);
+    if (missing.length > 0) {
+      return { content: [{ type: "text", text: `Cannot create post — unresolved image references:\n${missing.map(m => `  - ${m}`).join("\n")}\n\nUpload images first with upload_image, then use the returned path in your body.` }], isError: true };
+    }
+
     const s = slug ?? slugify(title);
     const filePath = writePostFile(s, status, {
       title,
@@ -276,10 +299,10 @@ function createServer(): McpServer {
 
   // --- save_draft ---
   server.registerTool("save_draft", {
-    description: "Save or update a draft. Do NOT rewrite the entire draft — only apply the specific changes requested by the user. Present post content as formatted markdown, not as a code block.",
+    description: "Save or update a draft. Do NOT rewrite the entire draft — only apply the specific changes requested by the user. Present post content as formatted markdown, not as a code block. IMPORTANT: upload all images first with upload_image, then use the returned paths in your article body. External image URLs are NOT allowed.",
     inputSchema: {
       title: z.string().describe("Draft title"),
-      body: z.string().describe("Draft body (Markdown)"),
+      body: z.string().describe("Draft body (Markdown). Image paths must come from upload_image responses. No external URLs."),
       categories: z.array(z.string()).optional().describe("Categories"),
       tags: z.array(z.string()).optional().describe("Tags"),
       slug: z.string().optional().describe("Custom slug (auto-generated from title if omitted)"),
@@ -290,6 +313,11 @@ function createServer(): McpServer {
     if (confirm !== true) {
       return { content: [{ type: "text", text: "Draft save cancelled: confirm must be true." }] };
     }
+    const missing = validateImageRefs(body);
+    if (missing.length > 0) {
+      return { content: [{ type: "text", text: `Cannot save draft — unresolved image references:\n${missing.map(m => `  - ${m}`).join("\n")}\n\nUpload images first with upload_image, then use the returned path in your body.` }], isError: true };
+    }
+
     const s = slug ?? slugify(title);
     const dirPath = join(config.repoPath, config.draftsDir);
     mkdirSync(dirPath, { recursive: true });
